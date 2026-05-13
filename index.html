@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Flow | Project Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --bg: #0b0e14;
+            --sidebar: #12151c;
+            --card: #1c212c;
+            --border: #2d333f;
+            --accent: #7c4dff;
+            --text: #e1e1e6;
+            --text-dim: #9499a6;
+            --col-1: #ff5252;
+            --col-2: #ffd740;
+            --col-3: #69f0ae;
+        }
+
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+
+        /* Sidebar & Navigation */
+        #sidebar {
+            width: 280px; background: var(--sidebar); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; padding: 24px; transition: transform 0.3s; z-index: 1000;
+        }
+
+        .folder-item {
+            display: flex; align-items: center; padding: 10px; border-radius: 8px;
+            margin-bottom: 6px; cursor: pointer; border: 1px solid transparent;
+        }
+        .folder-item.active { background: rgba(124, 77, 255, 0.15); border-color: var(--accent); }
+
+        /* Main Workspace */
+        #main { flex: 1; display: flex; flex-direction: column; padding: 30px; overflow-x: auto; position: relative; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        
+        .status-badge {
+            font-size: 0.7rem; color: var(--col-3); background: rgba(105, 240, 174, 0.1);
+            padding: 4px 10px; border-radius: 12px; display: flex; align-items: center; gap: 6px;
+        }
+        .status-dot { width: 6px; height: 6px; background: var(--col-3); border-radius: 50%; box-shadow: 0 0 5px var(--col-3); }
+
+        /* Board & Columns */
+        .board { display: flex; gap: 20px; height: 100%; }
+        .column {
+            background: rgba(21, 25, 33, 0.4); width: 320px; min-width: 320px;
+            border-radius: 12px; padding: 16px; border-top: 5px solid var(--border);
+            display: flex; flex-direction: column; transition: 0.2s;
+        }
+        .col-known { border-top-color: var(--col-1); }
+        .col-working { border-top-color: var(--col-2); }
+        .col-done { border-top-color: var(--col-3); }
+
+        /* Task Cards */
+        .card {
+            background: var(--card); padding: 15px; border-radius: 10px; margin-bottom: 12px;
+            border: 1px solid var(--border); cursor: grab; position: relative;
+        }
+        .card-controls { display: flex; gap: 10px; position: absolute; right: 10px; top: 10px; opacity: 0; transition: 0.2s; }
+        .card:hover .card-controls { opacity: 1; }
+        .control-btn { cursor: pointer; font-size: 0.85rem; opacity: 0.6; }
+        .control-btn:hover { opacity: 1; color: var(--accent); }
+
+        /* Inputs */
+        .editable-input {
+            background: transparent; border: 1px solid transparent; color: inherit;
+            padding: 6px; border-radius: 4px; outline: none; width: 100%; cursor: text;
+        }
+        .editable-input:focus { border-color: var(--accent); background: rgba(0,0,0,0.2); }
+        .pencil-icon { font-size: 0.7rem; opacity: 0.3; margin-left: -20px; pointer-events: none; }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85); display:none; justify-content:center; align-items:center; z-index:2000;
+        }
+        .modal { background: var(--sidebar); padding: 30px; border-radius: 12px; width: 400px; border: 1px solid var(--border); }
+        
+        /* Helpers */
+        .btn-side { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-prime { background: var(--accent); color: white; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+        
+        kbd {
+            background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; border-bottom: 2px solid #000;
+        }
+
+        #shortcut-guide-btn {
+            position: fixed; bottom: 20px; right: 20px; color: var(--text-dim);
+            font-size: 0.8rem; cursor: pointer; background: var(--sidebar); padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h3 style="font-size:0.7rem; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px">Projects</h3>
+        <div id="folder-list"></div>
+        <button class="btn-side btn-prime" onclick="addFolder()">+ New Project <kbd style="float:right">P</kbd></button>
+        <button class="btn-side btn-outline" onclick="exportJSON()" style="margin-top: auto;">
+            <i class="fa-solid fa-download"></i> Export JSON <kbd style="float:right">E</kbd>
+        </button>
+    </div>
+
+    <div id="main">
+        <div class="header-top">
+            <div style="display:flex; align-items:center; gap:15px;">
+                <input class="editable-input" id="active-title" style="font-size: 1.6rem; font-weight: bold; width:auto">
+                <i class="fa-solid fa-pencil pencil-icon"></i>
+            </div>
+            <div style="display:flex; gap:15px; align-items:center">
+                <div class="status-badge"><div class="status-dot"></div> Local Data Active</div>
+                <div id="stats" style="color:var(--col-3); font-weight:bold;">0% Done</div>
+            </div>
+        </div>
+
+        <div class="board" id="board-container"></div>
+    </div>
+
+    <div id="shortcut-guide-btn" onclick="openShortcuts()">Press <kbd>?</kbd> for shortcuts</div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="task-modal">
+        <div class="modal">
+            <h3>New Task</h3>
+            <input type="text" id="task-input" placeholder="Task description..." autofocus style="width:100%; padding:12px; background:var(--bg); color:white; border:1px solid var(--border); border-radius:6px;">
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                <button class="btn-outline" onclick="closeModals()">Cancel</button>
+                <button class="btn-prime" onclick="confirmAddTask()" style="padding:10px 20px; border-radius:6px; border:none; cursor:pointer">Save Task</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="help-modal">
+        <div class="modal">
+            <h3 style="margin-top:0">Keyboard Shortcuts</h3>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:20px;">
+                <div><kbd>N</kbd> New Task</div>
+                <div><kbd>P</kbd> New Project</div>
+                <div><kbd>E</kbd> Export JSON</div>
+                <div><kbd>?</kbd> Show Help</div>
+                <div><kbd>Esc</kbd> Close Modal</div>
+                <div><kbd>Enter</kbd> Confirm</div>
+            </div>
+            <button class="btn-side btn-prime" onclick="closeModals()" style="margin-top:30px">Got it</button>
+        </div>
+    </div>
+
+    <script>
+        let state = JSON.parse(localStorage.getItem('v5_data')) || {
+            folders: [{ id: 'f1', name: 'Alpha Goals', cols: [
+                { id: 'c1', name: 'Backlog', class: 'col-known', tasks: [] },
+                { id: 'c2', name: 'In Progress', class: 'col-working', tasks: [] },
+                { id: 'c3', name: 'Completed', class: 'col-done', tasks: [] }
+            ]}],
+            activeId: 'f1'
+        };
+
+        let currentColId = null;
+
+        function save() {
+            localStorage.setItem('v5_data', JSON.stringify(state));
+            render();
+        }
+
+        function render() {
+            const flist = document.getElementById('folder-list');
+            flist.innerHTML = '';
+            state.folders.forEach(f => {
+                const div = document.createElement('div');
+                div.className = `folder-item ${f.id === state.activeId ? 'active' : ''}`;
+                div.onclick = () => { state.activeId = f.id; save(); };
+                div.innerHTML = `<i class="fa-solid fa-folder" style="margin-right:10px; opacity:0.5"></i>
+                    <input class="editable-input" value="${f.name}" onchange="updateFolderName('${f.id}', this.value)" onclick="event.stopPropagation()">
+                    <i class="fa-solid fa-trash" style="margin-left:auto; opacity:0.2" onclick="deleteFolder('${f.id}')"></i>`;
+                flist.appendChild(div);
+            });
+
+            const active = state.folders.find(f => f.id === state.activeId);
+            document.getElementById('active-title').value = active.name;
+            document.getElementById('active-title').onchange = (e) => updateFolderName(active.id, e.target.value);
+
+            const board = document.getElementById('board-container');
+            board.innerHTML = '';
+            active.cols.forEach((col, idx) => {
+                const colDiv = document.createElement('div');
+                colDiv.className = `column ${col.class}`;
+                colDiv.ondragover = (e) => e.preventDefault();
+                colDiv.ondrop = (e) => handleDrop(e, col.id);
+
+                colDiv.innerHTML = `
+                    <div style="display:flex; align-items:center">
+                        <input class="editable-input" value="${col.name}" style="font-weight:bold; font-size:0.75rem; text-transform:uppercase" onchange="updateColName('${col.id}', this.value)">
+                        <i class="fa-solid fa-pencil pencil-icon"></i>
+                    </div>
+                    <div style="flex:1; margin-top:15px;">
+                        ${col.tasks.map(t => `
+                            <div class="card" draggable="true" ondragstart="handleDragStart(event, '${t.id}', '${col.id}')">
+                                ${t.text}
+                                <div class="card-controls">
+                                    <i class="fa-solid fa-trash-can control-btn" onclick="deleteTask('${col.id}', '${t.id}')"></i>
+                                    ${idx < 2 ? `<i class="fa-solid fa-circle-arrow-right control-btn" style="color:var(--col-3)" onclick="moveTaskForward('${col.id}', '${t.id}')"></i>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="btn-side btn-outline" style="cursor:pointer; text-align:center" onclick="openTaskModal('${col.id}')">+ Add Task</div>
+                `;
+                board.appendChild(colDiv);
+            });
+            updateStats(active);
+        }
+
+        // Project Logic
+        function addFolder() {
+            const id = 'f' + Date.now();
+            state.folders.push({ id, name: 'New Project', cols: [
+                { id: 'c1'+id, name: 'Known', class: 'col-known', tasks: [] },
+                { id: 'c2'+id, name: 'Working', class: 'col-working', tasks: [] },
+                { id: 'c3'+id, name: 'Completed', class: 'col-done', tasks: [] }
+            ]});
+            state.activeId = id; save();
+        }
+        function updateFolderName(id, val) { state.folders.find(f => f.id === id).name = val; save(); }
+        function updateColName(cid, val) { state.folders.find(f => f.id === state.activeId).cols.find(c => c.id === cid).name = val; save(); }
+        function deleteFolder(id) { if(state.folders.length > 1) { state.folders = state.folders.filter(f => f.id !== id); state.activeId = state.folders[0].id; save(); } }
+
+        // Task Logic
+        function moveTaskForward(cid, tid) {
+            const f = state.folders.find(f => f.id === state.activeId);
+            const cIdx = f.cols.findIndex(c => c.id === cid);
+            if(cIdx < 2) {
+                const task = f.cols[cIdx].tasks.find(t => t.id === tid);
+                f.cols[cIdx].tasks = f.cols[cIdx].tasks.filter(t => t.id !== tid);
+                f.cols[cIdx+1].tasks.push(task);
+                save();
+            }
+        }
+        function deleteTask(cid, tid) {
+            const f = state.folders.find(f => f.id === state.activeId);
+            const col = f.cols.find(c => c.id === cid);
+            col.tasks = col.tasks.filter(t => t.id !== tid);
+            save();
+        }
+
+        // Modals
+        function openTaskModal(cid) { currentColId = cid; document.getElementById('task-modal').style.display = 'flex'; document.getElementById('task-input').focus(); }
+        function openShortcuts() { document.getElementById('help-modal').style.display = 'flex'; }
+        function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
+        function confirmAddTask() {
+            const val = document.getElementById('task-input').value;
+            if(!val) return;
+            const f = state.folders.find(f => f.id === state.activeId);
+            f.cols.find(c => c.id === (currentColId || f.cols[0].id)).tasks.push({ id: 't'+Date.now(), text: val });
+            document.getElementById('task-input').value = '';
+            closeModals(); save();
+        }
+
+        // System
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "pro_flow_backup.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        function updateStats(f) {
+            const total = f.cols.reduce((s, c) => s + c.tasks.length, 0);
+            const done = f.cols[2].tasks.length;
+            document.getElementById('stats').innerText = (total === 0 ? 0 : Math.round((done/total)*100)) + '% Done';
+        }
+
+        // Keyboard Shortcuts
+        window.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT') {
+                if (e.key === 'Escape') { closeModals(); document.activeElement.blur(); }
+                if (e.key === 'Enter') { if(document.getElementById('task-modal').style.display === 'flex') confirmAddTask(); else document.activeElement.blur(); }
+                return;
+            }
+            if (e.key === 'n') { e.preventDefault(); openTaskModal(null); }
+            if (e.key === 'p') { e.preventDefault(); addFolder(); }
+            if (e.key === 'e') { e.preventDefault(); exportJSON(); }
+            if (e.key === '?') { e.preventDefault(); openShortcuts(); }
+            if (e.key === 'Escape') closeModals();
+        });
+
+        // Drag/Drop Logic (Simplified)
+        let dTaskId, sColId;
+        function handleDragStart(e, tid, cid) { dTaskId = tid; sColId = cid; }
+        function handleDrop(e, tcid) {
+            const f = state.folders.find(f => f.id === state.activeId);
+            const sc = f.cols.find(c => c.id === sColId);
+            const tc = f.cols.find(c => c.id === tcid);
+            const task = sc.tasks.find(t => t.id === dTaskId);
+            sc.tasks = sc.tasks.filter(t => t.id !== dTaskId);
+            tc.tasks.push(task);
+            save();
+        }
+
+        render();
+    </script>
+</body>
+</html>
