@@ -91,8 +91,8 @@ Copyright © 2026 Samip Developer
 
 ## Screenshots
 
-<img width="1200" alt="Project Dev Tracker" src="https://raw.githubusercontent.com/Samip-Developer/project-dev-tracker/main/preview.png">
-
+<img width="1200" alt="Project Dev Tracker" src="https://github.com/Samip-Developer/project-dev-tracker/blob/main/ProjectTracker-1.png">
+<img width="1200" alt="Project Dev Tracker" src="https://github.com/Samip-Developer/project-dev-tracker/blob/main/ProjectTracker-2.png">
 ---
 
 ## Author
